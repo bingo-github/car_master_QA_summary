@@ -16,7 +16,31 @@ from tqdm import tqdm
 class DataPreprocess(object):
     def __init__(self, ori_data_fpath):
         jieba.load_userdict('./data/vocab/user_dict.txt')
+        self.stopwords = set([line.strip() for line in open('./data/vocab/chinese_stopwords.txt', encoding='UTF-8').readlines()])
         self.ori_data_fpath = ori_data_fpath
+
+
+    def _replace_special_char_(self, text):
+        '''
+        替换特殊字符
+        :param text:  str 待替换的文本
+        :return: str 替换后的文本
+        '''
+        text = text.lower()
+        text = text.replace('.', '<PERIOD>')
+        text = text.replace('。', '<PERIOD>')
+        text = text.replace(',', '<COMMA>')
+        text = text.replace('，', '<COMMA> ')
+        text = text.replace('"', '<QUOTATION_MARK>')
+        text = text.replace(';', '<SEMICOLON>')
+        text = text.replace('!', '<EXCLAMATION_MARK>')
+        text = text.replace('?', '<QUESTION_MARK>')
+        text = text.replace('(', '<LEFT_PAREN>')
+        text = text.replace(')', '<RIGHT_PAREN>')
+        text = text.replace('--', '<HYPHENS>')
+        text = text.replace('?', '<QUESTION_MARK>')
+        text = text.replace(':', '<COLON>')
+        return text
 
 
     def generate_vocab(self,
@@ -33,8 +57,11 @@ class DataPreprocess(object):
         :special_text_columns: 词表来源的字段，品牌或信号等不需要切词的字段
         :save_freq: bool 是否保存词频，由于词频后续可能有用，因此可以先保存
         :drop_lt_freq: int 去掉词频少于drop_lt_freq的词，如果为None，则不进行过滤
-        :returns: TODO
+        :returns:
 
+        >>> os.chdir('..')
+        >>> data_preprocess_obj = DataPreprocess('./data/ori_data/AutoMaster_TrainSet.csv')
+        >>> data_preprocess_obj.generate_vocab(save_freq=False, drop_lt_freq=50)
         '''
         word_count_dict = {}
 
@@ -45,6 +72,7 @@ class DataPreprocess(object):
                 text = getattr(row, one_col)
                 if pd.isna(text):
                     continue
+                text = self._replace_special_char_(text)
                 w_list = jieba.cut(text.replace('|', ' '))   # 由于在对话中，车主和技师的对话是用|分开的，为避免|的影响，将其替换为" "
                 for one_w in w_list:
                     word_count_dict.setdefault(one_w, 0)
@@ -58,7 +86,7 @@ class DataPreprocess(object):
 
         # S2: 数据保存
         with open(target_fpath, 'w', encoding='utf-8') as fp:
-            word_list = word_count_dict.keys()
+            word_list = [word for word in word_count_dict.keys() if word not in self.stopwords]
             for idx, one_w in enumerate(word_list):
                 freq = word_count_dict[one_w]
                 if drop_lt_freq is not None and freq < drop_lt_freq:     # 去掉低频词
