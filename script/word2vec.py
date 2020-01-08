@@ -3,15 +3,20 @@
 @author:    wujunbin342@163.com
 @date:      2020-01-07
 @desc:      word2vec的CBOW和skip-gram实现
+            使用tensorflow 1.0
 '''
+import os
+os.chdir('..')
 import sys
 sys.path.append('./script')
+import time
 
 import numpy as np
 import pandas as pd
 import jieba
 from tqdm import tqdm
 from collections import Counter
+import tensorflow as tf
 
 
 class Word2Vec(object):
@@ -19,13 +24,15 @@ class Word2Vec(object):
     word2vec词向量模型
     '''
     def __init__(self,
-                 corpus_fpath,
+                 corpus_fpath_list,
                  corpus_text_columns,
-        vocab_fpath='./data/vocab/vocab.txt'):
+                 vocab_fpath='./data/vocab/vocab.txt',
+                 embedding_size=300):
         self.stopwords = set([line.strip() for line in open('./data/vocab/chinese_stopwords.txt', encoding='UTF-8').readlines()])
-        self.corpus_fpath = corpus_fpath
+        self.corpus_fpath_list = corpus_fpath_list
         self.corpus_text_columns = corpus_text_columns
         self.vocab_fpath = vocab_fpath
+        self.embedding_size = embedding_size
         self.word_to_int = {}
         self.int_to_word = {}
         self.corpus_by_int = None
@@ -36,9 +43,9 @@ class Word2Vec(object):
         获取词表信息
         :return:
         '''
-        with open(self.vocab_fpath, 'r') as fp:
+        with open(self.vocab_fpath, 'r', encoding='utf-8') as fp:
             for line in fp:
-                items = line.strip('\n').strip('\r').split(' ')
+                items = line.strip('\n').strip('\r').split('\t')
                 self.word_to_int[items[0]] = int(items[1])
                 self.int_to_word[int(items[1])] = items[0]
 
@@ -72,15 +79,17 @@ class Word2Vec(object):
         :return: words_list [word]
         '''
         words_list = []
-        df = pd.read_csv(self.corpus_fpath)
-        for row in tqdm(df.itertuples(index=False), '[DataPreprocess.get_vocab] generating vocal'):
-            for one_col in self.corpus_text_columns:
-                text = getattr(row, one_col)
-                if pd.isna(text):
-                    continue
-                text = self._replace_special_char_(text)
-                w_list = jieba.cut(text.replace('|', ' '))   # 由于在对话中，车主和技师的对话是用|分开的，为避免|的影响，将其替换为" "
-                words_list.extend(w_list)
+        for one_corpus_fpath in self.corpus_fpath_list:
+            df = pd.read_csv(one_corpus_fpath)
+            target_corpus_text_columns_set = set(self.corpus_text_columns)&set(df.columns.to_list())
+            for row in tqdm(df.itertuples(index=False), '[DataPreprocess.get_vocab] getint corpus from [{}]'.format(one_corpus_fpath)):
+                for one_col in target_corpus_text_columns_set:
+                    text = getattr(row, one_col)
+                    if pd.isna(text):
+                        continue
+                    text = self._replace_special_char_(text)
+                    w_list = jieba.cut(text.replace('|', ' '))   # 由于在对话中，车主和技师的对话是用|分开的，为避免|的影响，将其替换为" "
+                    words_list.extend(w_list)
         return words_list
 
 
@@ -156,3 +165,74 @@ class Word2Vec(object):
                 x.extend([batch_x]*len(batch_y))
                 y.extend((batch_y))
             yield x, y
+
+
+    def train_skip_gram(self, batch_size=100, window_size=3, epochs=10, n_sampled=1000):
+        '''
+        训练 skip-gram
+        :param batch_size: int batch大小
+        :param window_size: int 窗口大小
+        :param epochs: int 迭代轮数
+        :param n_sampled: int 采样数
+        :return:
+
+        >> word_vec_obj = Word2Vec(corpus_fpath_list=['./data/ori_data/AutoMaster_TrainSet.csv',
+                                               './data/ori_data/AutoMaster_TestSet.csv'],
+                            corpus_text_columns=['Question', 'Dialogue', 'Report'])
+        >> word_vec_obj.train_skip_gram()
+        '''
+        # S1: 获取训练数据
+        self.get_vocab()   # 获取此表数据
+        wordint_list = self.get_corpus_by_int(th_for_drop_high_freq_words=0.8)
+
+        # S2: 构建训练网络
+        self.skip_gram_graph = tf.Graph()
+        with self.skip_gram_graph.as_default():
+            # 输入层：配置输入占位符
+            inputs = tf.placeholder(tf.int32, shape=[None], name='inputs')
+            labels = tf.placeholder(tf.int32, shape=[None, None], name='labels')
+            # 嵌入层
+            self.vocab_size = len(self.word_to_int)
+            embedding_w = tf.Variable(tf.random_uniform([self.vocab_size, self.embedding_size], -1, 1))
+            embed = tf.nn.embedding_lookup(embedding_w, inputs)
+            # 输出下采样
+            softmax_w = tf.Variable(tf.truncated_normal([self.vocab_size, self.embedding_size], stddev=0.1))
+            softmax_b = tf.Variable(tf.zeros(self.vocab_size))
+            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, labels, embed, n_sampled, self.vocab_size)
+            cost = tf.reduce_mean(loss)
+            optimizer = tf.train.AdamOptimizer().minimize(cost)
+
+        # S3: 训练
+        with self.skip_gram_graph.as_default():
+            saver = tf.train.Saver()
+        with tf.Session(graph=self.skip_gram_graph) as sess:
+            iteration = 1
+            total_loss = 0
+            sess.run(tf.global_variables_initializer())
+            for e in range(1, epochs+1):
+                # 获取batch数据
+                batches = self.get_batch(words=wordint_list, batch_size=batch_size, window_size=window_size)
+                start = time.time()
+                for x, y in batches:
+                    feed = {inputs:x, labels:np.array(y)[:, None]}
+                    train_loss, _ = sess.run([cost, optimizer], feed_dict=feed)
+                    total_loss += train_loss
+                    if 0 == iteration%100:
+                        end = time.time()
+                        print("Epoch {}/{}".format(e, epochs),
+                              "Iteration: {}".format(iteration),
+                              "Avg. Training loss: {:.4f}".format(total_loss / 1000),
+                              "{:.4f} sec/batch".format((end - start) / 1000))
+                        total_loss = 0
+                        start = time.time()
+                    iteration += 1
+
+        # S4: 模型保存
+        save_path = saver.save(sess, "./model/word2vec/skip_gram/checkpoints/text8.ckpt")
+
+
+if __name__ == '__main__':
+    word_vec_obj = Word2Vec(corpus_fpath_list=['./data/ori_data/AutoMaster_TrainSet.csv',
+                                               './data/ori_data/AutoMaster_TestSet.csv'],
+                            corpus_text_columns=['Question', 'Dialogue', 'Report'])
+    word_vec_obj.train_skip_gram()

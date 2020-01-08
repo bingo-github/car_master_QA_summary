@@ -5,6 +5,7 @@
 @desc:      data preprocess  数据预处理
 '''
 import os
+os.chdir('..')
 import sys
 sys.path.append('script')
 
@@ -14,10 +15,10 @@ from tqdm import tqdm
 
 
 class DataPreprocess(object):
-    def __init__(self, ori_data_fpath):
+    def __init__(self, ori_data_fpath_list):
         jieba.load_userdict('./data/vocab/user_dict.txt')
         self.stopwords = set([line.strip() for line in open('./data/vocab/chinese_stopwords.txt', encoding='UTF-8').readlines()])
-        self.ori_data_fpath = ori_data_fpath
+        self.ori_data_fpath_list = ori_data_fpath_list
 
 
     def _replace_special_char_(self, text):
@@ -44,7 +45,7 @@ class DataPreprocess(object):
 
 
     def generate_vocab(self,
-                       target_fpath='./data/vocab/vacab.txt',
+                       target_fpath='./data/vocab/vocab.txt',
                        text_columns=['Question', 'Dialogue', 'Report'],
                        special_text_columns=['Brand', 'Model'],
                        save_freq=True,
@@ -59,43 +60,46 @@ class DataPreprocess(object):
         :drop_lt_freq: int 去掉词频少于drop_lt_freq的词，如果为None，则不进行过滤
         :returns:
 
-        >>> os.chdir('..')
-        >>> data_preprocess_obj = DataPreprocess('./data/ori_data/AutoMaster_TrainSet.csv')
-        >>> data_preprocess_obj.generate_vocab(save_freq=False, drop_lt_freq=50)
+        >> os.chdir('..')
+        >> data_preprocess_obj = DataPreprocess('./data/ori_data/AutoMaster_TrainSet.csv')
+        >> data_preprocess_obj.generate_vocab(save_freq=False, drop_lt_freq=50)
         '''
         word_count_dict = {}
 
         # S1: 切词并获取数据
-        df = pd.read_csv(self.ori_data_fpath)
-        for row in tqdm(df.itertuples(index=False), '[DataPreprocess.get_vocab] generating vocal'):
-            for one_col in text_columns:
-                text = getattr(row, one_col)
-                if pd.isna(text):
-                    continue
-                text = self._replace_special_char_(text)
-                w_list = jieba.cut(text.replace('|', ' '))   # 由于在对话中，车主和技师的对话是用|分开的，为避免|的影响，将其替换为" "
-                for one_w in w_list:
-                    word_count_dict.setdefault(one_w, 0)
-                    word_count_dict[one_w] += 1
-            for one_col in special_text_columns:   # 车品牌和型号不进行分词
-                spw = getattr(row, one_col)
-                if pd.isna(spw):
-                    continue
-                word_count_dict.setdefault(spw, 0)
-                word_count_dict[spw] += 1
+        for one_ori_data_fpath in self.ori_data_fpath_list:
+            df = pd.read_csv(one_ori_data_fpath)
+            target_text_columns_set = set(text_columns)&set(df.columns.to_list())
+            target_special_text_columns_set = set(special_text_columns)&set(df.columns.to_list())
+            for row in tqdm(df.itertuples(index=False), '[DataPreprocess.get_vocab] generating vocal from [{}]'.format(one_ori_data_fpath)):
+                for one_col in target_text_columns_set:
+                    text = getattr(row, one_col)
+                    if pd.isna(text):
+                        continue
+                    text = self._replace_special_char_(text)
+                    w_list = jieba.cut(text.replace('|', ' '))   # 由于在对话中，车主和技师的对话是用|分开的，为避免|的影响，将其替换为" "
+                    for one_w in w_list:
+                        word_count_dict.setdefault(one_w, 0)
+                        word_count_dict[one_w] += 1
+                for one_col in target_special_text_columns_set:   # 车品牌和型号不进行分词
+                    spw = getattr(row, one_col)
+                    if pd.isna(spw):
+                        continue
+                    word_count_dict.setdefault(spw, 0)
+                    word_count_dict[spw] += 1
 
         # S2: 数据保存
         with open(target_fpath, 'w', encoding='utf-8') as fp:
-            word_list = [word for word in word_count_dict.keys() if word not in self.stopwords]
+            word_list = [word for word in word_count_dict.keys() if word not in self.stopwords and '\t' != word]
             for idx, one_w in enumerate(word_list):
                 freq = word_count_dict[one_w]
                 if drop_lt_freq is not None and freq < drop_lt_freq:     # 去掉低频词
                     continue
                 one_vocab_info = [one_w, idx] if not save_freq else [one_w, idx, freq]
-                fp.write(' '.join(["{}".format(one_v) for one_v in one_vocab_info])+'\n')
+                fp.write('\t'.join(["{}".format(one_v) for one_v in one_vocab_info])+'\n')
 
 
 if __name__ == "__main__":
-    os.chdir('..')
-    data_preprocess_obj = DataPreprocess('./data/ori_data/AutoMaster_TrainSet.csv')
+    ori_data_fpath_list = ['./data/ori_data/AutoMaster_TrainSet.csv', './data/ori_data/AutoMaster_TestSet.csv']
+    data_preprocess_obj = DataPreprocess(ori_data_fpath_list=ori_data_fpath_list)
     data_preprocess_obj.generate_vocab(save_freq=False, drop_lt_freq=50)
