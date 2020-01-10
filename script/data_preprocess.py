@@ -100,4 +100,4 @@ class DataPreprocess(object):
 if __name__ == "__main__":
     ori_data_fpath_list = ['./data/ori_data/AutoMaster_TrainSet.csv', './data/ori_data/AutoMaster_TestSet.csv']
     data_preprocess_obj = DataPreprocess(ori_data_fpath_list=ori_data_fpath_list)
-    data_preprocess_obj.generate_vocab(save_freq=False, drop_lt_freq=50)
+    data_preprocess_obj.generate_vocab(save_freq=False, drop_lt_freq=5)
