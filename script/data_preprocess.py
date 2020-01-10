@@ -4,8 +4,6 @@
 @date:      2020-01-05
 @desc:      data preprocess  数据预处理
 '''
-import os
-os.chdir('..')
 import sys
 sys.path.append('script')
 

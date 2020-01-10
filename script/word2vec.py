@@ -5,8 +5,6 @@
 @desc:      word2vec的CBOW和skip-gram实现
             使用tensorflow 1.0
 '''
-import os
-os.chdir('..')
 import sys
 sys.path.append('./script')
 import time

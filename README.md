@@ -8,10 +8,5 @@
 ```bash
 >>> python3 script/data_preprocess.py
 ```
-或
-```bash
->>> cd script
->>> python3 data_preprocess.py
-```
 2. 最终生成的词表文件见 `./data/vocab/vocab.txt`。（该文件中词与词index之间的分隔符为`\t`）
 
