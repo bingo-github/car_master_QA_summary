@@ -132,6 +132,7 @@ dmypy.json
 ## private
 data/
 log/
+model/
 ## unuse
 .idea/
 nohup.out

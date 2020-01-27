@@ -292,7 +292,7 @@ class MyWord2Vev2(object):
         :param model_path:  str     模型的路径
         :return:    None
         '''
-        if "fasttest" == self.wv_type:
+        if "fasttext" == self.wv_type:
             self.wv_model = fasttext.FastText.load(model_path)
         elif "word2vec" == self.wv_type:
             self.wv_model = word2vec.Word2Vec.load(model_path)
@@ -313,7 +313,7 @@ class MyWord2Vev2(object):
                 idx = int(items[1])
                 word_idx_map[word] = idx
         word_vec_dict = self.wv(word_idx_map.keys())
-        idx_vec_map = zip(word_idx_map.values(), word_vec_dict.values())
+        idx_vec_map = dict(zip(word_idx_map.values(), word_vec_dict.values()))
         # 保存 embedding matrix
         if save_fpath:
             with open(save_fpath, 'w') as fp:
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     word2vec2_obj = MyWord2Vev2(wv_config_fpath, wv_type)
     merge_seg_data_fpath = './data/processed_data/merge_train_test_seg_data.csv'
     word2vec2_obj.train_wv(merge_seg_data_fpath)
-    model_path = './model/word2vec/fasttext.model'
+    model_path = './model/word2vec/fasttext/fasttext.model'
     word2vec2_obj.save_model(model_path)
     word2vec2_obj.get_embedding_matrix(vocab_fpath='./data/vocab/vocab.txt',
                                        save_fpath='./data/processed_data/vocabidx_vec_matrix.txt')
