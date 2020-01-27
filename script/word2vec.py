@@ -323,12 +323,16 @@ class MyWord2Vev2(object):
 
 
 if __name__ == '__main__':
-    wv_config_fpath = './config/wv_config.json'
-    wv_type = 'fasttext'
+    wv_config_fpath = './config/wv_config.json'     # 配置文件地址
+    wv_type = 'fasttext'                            # 词向量类型
+    # 生成对象
     word2vec2_obj = MyWord2Vev2(wv_config_fpath, wv_type)
+    # 训练词向量
     merge_seg_data_fpath = './data/processed_data/merge_train_test_seg_data.csv'
     word2vec2_obj.train_wv(merge_seg_data_fpath)
+    # 保存词向量模型
     model_path = './model/word2vec/fasttext/fasttext.model'
     word2vec2_obj.save_model(model_path)
+    # 构建embedding_matrix并保存
     word2vec2_obj.get_embedding_matrix(vocab_fpath='./data/vocab/vocab.txt',
                                        save_fpath='./data/processed_data/vocabidx_vec_matrix.txt')

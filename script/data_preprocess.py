@@ -167,7 +167,9 @@ class DataPreprocess(object):
         :param cols:    [str]       待处理的字段
         :return:        DataFrame   处理好的数据
         '''
+        # 处理空数据
         df = df.fillna('')
+        # 批量处理数据
         for one_col in cols:
             if one_col in df.columns:
                 df[one_col] = df[one_col].apply(self.sentence_proc)
@@ -210,18 +212,21 @@ class DataPreprocess(object):
         :param multi_process:       bool, default False, 是否使用多进程
         :return:    DataFrame
         '''
-        # 加载数据
+        # S1: 加载数据
         train_df, test_df, _ = self.load_dataset(ori_data_fpath_list[0],
                                                 ori_data_fpath_list[1])
-        if multi_process:
+        # S2: 处理数据
+        if multi_process:     # 多进程处理
             train_df = self.parallelize(train_df, self.data_frame_proc)
             test_df = self.parallelize(test_df, self.data_frame_proc)
-        else:
+        else:               # 单进程处理
             train_df = data_preprocess_obj.data_frame_proc(train_df)
             test_df = data_preprocess_obj.data_frame_proc(test_df)
+        ## 将处理完的数据保存
         train_df.to_csv(seg_data_fpath_list[0], index=None, header=True)
         test_df.to_csv(seg_data_fpath_list[1], index=None, header=True)
 
+        # S3: 将处理完的数据合并为训练词向量用的数据，并保存
         train_df['merged'] = train_df[['Question', 'Dialogue', 'Report']].apply(lambda x: ' '.join(x), axis=1)
         test_df['merged'] = test_df[['Question', 'Dialogue']].apply(lambda x: ' '.join(x), axis=1)
         merged_df = pd.concat([train_df[['merged']], test_df[['merged']]], axis=0)
