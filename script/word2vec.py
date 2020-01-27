@@ -11,13 +11,16 @@ import time
 
 import numpy as np
 import pandas as pd
+import json
 import jieba
 from tqdm import tqdm
 from collections import Counter
 import tensorflow as tf
+from gensim.models import fasttext, word2vec
+from gensim.models.word2vec import LineSentence
 
 
-class Word2Vec(object):
+class MyWord2Vec(object):
     '''
     word2vec词向量模型
     '''
@@ -174,10 +177,10 @@ class Word2Vec(object):
         :param n_sampled: int 采样数
         :return:
 
-        >> word_vec_obj = Word2Vec(corpus_fpath_list=['./data/ori_data/AutoMaster_TrainSet.csv',
+        >> my_word_vec_obj = MyWord2Vec(corpus_fpath_list=['./data/ori_data/AutoMaster_TrainSet.csv',
                                                './data/ori_data/AutoMaster_TestSet.csv'],
                             corpus_text_columns=['Question', 'Dialogue', 'Report'])
-        >> word_vec_obj.train_skip_gram()
+        >> my_word_vec_obj.train_skip_gram()
         '''
         # S1: 获取训练数据
         self.get_vocab()   # 获取此表数据
@@ -229,8 +232,103 @@ class Word2Vec(object):
         save_path = saver.save(sess, "./model/word2vec/skip_gram/checkpoints/text8.ckpt")
 
 
+class MyWord2Vev2(object):
+    '''
+    词向量化相关
+    '''
+    def __init__(self, wv_config_fpath,
+                        wv_type='word2vec'):
+        with open(wv_config_fpath, 'r') as fp:
+            self.wv_config = json.load(fp)
+        self.wv_type = wv_type
+
+
+    def train_wv(self, merge_seg_data_fpath):
+        '''
+        训练词向量
+        :param merge_seg_data_fpath: str 训练词向量的数据
+        :return:
+        '''
+        # 训练词向量
+        if 'word2vec' == self.wv_type:
+            self.wv_model = word2vec.Word2Vec(LineSentence(merge_seg_data_fpath),
+                                              min_count=self.wv_config['min_count'],
+                                              size=self.wv_config['size'])
+        elif 'fasttext' == self.wv_type:
+            self.wv_model = fasttext.FastText(LineSentence(merge_seg_data_fpath),
+                                              min_count=self.wv_config['min_count'],
+                                              size=self.wv_config['size'])
+
+
+    def wv(self, words):
+        '''
+        词转向量
+        :param words:   [word]  待转的词列表
+        :return:        [vec]   词向量列表
+        '''
+        word_vec_dict = {}
+        if 'word2vec' == self.wv_type:
+            for word in words:
+                if word in self.wv_model:
+                    word_vec_dict[word] = list(self.wv_model.wv[word])
+        elif 'fasttext' == self.wv_type:
+            for word in words:
+                word_vec_dict[word] = list(self.wv_model.wv[word])
+        return word_vec_dict
+
+
+    def save_model(self, model_path):
+        '''
+        保存模型
+        :param model_path:  str     模型保存的路径
+        :return:    None
+        '''
+        self.wv_model.save(model_path)
+
+
+    def load_model(self, model_path):
+        '''
+        加载模型
+        :param model_path:  str     模型的路径
+        :return:    None
+        '''
+        if "fasttest" == self.wv_type:
+            self.wv_model = fasttext.FastText.load(model_path)
+        elif "word2vec" == self.wv_type:
+            self.wv_model = word2vec.Word2Vec.load(model_path)
+
+
+    def get_embedding_matrix(self, vocab_fpath, save_fpath=None):
+        '''
+        保存词向量矩阵
+        :param vocab_fpath:     str     词表保存地址
+        :param save_fpath:      str     词向量保存地址
+        :return:    vocabidx_vec_map    {vocab_idx: [embedding_vector}
+        '''
+        word_idx_map = {}
+        with open(vocab_fpath, 'r') as fp:
+            for line in fp:
+                items = line.strip('\n').strip('\r').split('\t')
+                word = items[0]
+                idx = int(items[1])
+                word_idx_map[word] = idx
+        word_vec_dict = self.wv(word_idx_map.keys())
+        idx_vec_map = zip(word_idx_map.values(), word_vec_dict.values())
+        # 保存 embedding matrix
+        if save_fpath:
+            with open(save_fpath, 'w') as fp:
+                for one_idx in sorted(idx_vec_map.keys()):
+                    fp.write('\t'.join('{}'.format(one_v) for one_v in [one_idx, idx_vec_map[one_idx]])+'\r\n')
+        return idx_vec_map
+
+
 if __name__ == '__main__':
-    word_vec_obj = Word2Vec(corpus_fpath_list=['./data/ori_data/AutoMaster_TrainSet.csv',
-                                               './data/ori_data/AutoMaster_TestSet.csv'],
-                            corpus_text_columns=['Question', 'Dialogue', 'Report'])
-    word_vec_obj.train_skip_gram()
+    wv_config_fpath = './config/wv_config.json'
+    wv_type = 'fasttext'
+    word2vec2_obj = MyWord2Vev2(wv_config_fpath, wv_type)
+    merge_seg_data_fpath = './data/processed_data/merge_train_test_seg_data.csv'
+    word2vec2_obj.train_wv(merge_seg_data_fpath)
+    model_path = './model/word2vec/fasttext.model'
+    word2vec2_obj.save_model(model_path)
+    word2vec2_obj.get_embedding_matrix(vocab_fpath='./data/vocab/vocab.txt',
+                                       save_fpath='./data/processed_data/vocabidx_vec_matrix.txt')
