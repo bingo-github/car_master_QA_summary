@@ -306,7 +306,7 @@ class MyWord2Vev2(object):
         :return:    vocabidx_vec_map    {vocab_idx: [embedding_vector}
         '''
         word_idx_map = {}
-        with open(vocab_fpath, 'r') as fp:
+        with open(vocab_fpath, 'r', encoding='UTF-8') as fp:
             for line in fp:
                 items = line.strip('\n').strip('\r').split('\t')
                 word = items[0]
