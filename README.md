@@ -22,3 +22,5 @@
 ```bash
 >>> python3 script/word2vec.py
 ```
+### week3
+1. encode-decode代码位于`script/seq2seq.py`文件中
