@@ -19,6 +19,8 @@ import tensorflow as tf
 from gensim.models import fasttext, word2vec
 from gensim.models.word2vec import LineSentence
 
+import data_preprocess
+
 
 class MyWord2Vec(object):
     '''
@@ -260,6 +262,73 @@ class MyWord2Vev2(object):
                                               size=self.wv_config['size'])
 
 
+    def load_vocab(self, vocab_fpath):
+        '''
+        加载词表
+        :param vocab_fpath: str 文件路径
+        :return: vocab_idx_map, idx_vocab_map
+        '''
+        with open(vocab_fpath, 'r') as fp:
+            for line in fp:
+                items = line.strip('\n').strip('\r').split('\t')
+                word = items[0]
+                idx = int(items[1])
+                vocab_idx_map[word] = idx
+                idx_vocab_map[idx] = word
+        return vocab_idx_map, idx_vocab_map
+
+
+    def expand_vocab(self, vocab_fpath, 
+                    ori_train_fpath, 
+                    ori_test_fpath, 
+                    pad_trainX_fpath, 
+                    pad_trainY_fpath, 
+                    pad_testX_fpath):
+        '''
+        扩展wv模型的此表
+        :param vocab_fpath: str 词表的文件地址
+        :param ori_train_fpath:  str 文件地址
+        :param ori_test_fpath:  str 文件地址
+        :param pad_trainX_fpath:  str 文件地址
+        :param pad_trainY_fpath:  str 文件地址
+        :param pad_testX_fpath:  str 文件地址
+        '''
+        # 加载原先已经分词好的数据
+        train_df = pd.read_csv(ori_train_fpath)
+        test_df = pd.read_csv(ori_test_fpath)
+        trainX_series = train_df[['Question', 'Dialogue']].apply(lambda x:' '.join(x), axis=1)
+        trainY_series = train_df[['Report']]
+        testX_series = test_df[['Question', 'Dialogue']].apply(lambda x:' '.join(x), axis=1)
+        # 获取max_len
+        trainX_max_len = data_preprocess.get_max_len(trainX_series)
+        y_max_len = data_preprocess.get_max_len(trainY_series)
+        testX_max_len = data_preprocess.get_max_len(testX_series)
+        x_max_len = max(trainX_max_len, testX_max_len)
+        # 获取词表
+        vocab_idx_map, _ = self.load_vocab(vocab_fpath)
+        # pad
+        trainX_series = trainX_series.apply(lambda x:data_preprocess.pad_sentence(x, x_max_len, vocab_idx_map))
+        testX_series = testX_series.apply(lambda x:data_preprocess.pad_sentence(x, x_max_len, vocab_idx_map))
+        trainY_series = trainY_series.apply(lambda x:data_preprocess.pad_sentence(x, y_max_len, vocab_idx_map))
+        # 保存pad之后的数据
+        trainX_series.to_csv(pad_trainX_fpath, index=None, header=False)
+        testX_series.to_csv(pad_testX_fpath, index=None, header=False)
+        trainY_series.to_csv(pad_trainY_fpath, index=None, header=False)
+        # 扩展模型中的词表，并重新训练
+        self.wv_model.build_vocab(LineSentence(pad_trainX_fpath), update=True)
+        self.wv_model.train(LineSentence(pad_trainX_fpath), 
+                        epochs=self.wv_config['wv_train_epochs'], 
+                        total_examples=self.wv_model.corpus_count)
+        self.wv_model.build_vocab(LineSentence(pad_testX_fpath), update=True)
+        self.wv_model.train(LineSentence(pad_testX_fpath), 
+                        epochs=self.wv_config['wv_train_epochs'], 
+                        total_examples=self.wv_model.corpus_count)
+        self.wv_model.build_vocab(LineSentence(pad_trainY_fpath), update=True)
+        self.wv_model.train(LineSentence(pad_trainY_fpath), 
+                        epochs=self.wv_config['wv_train_epochs'], 
+                        total_examples=self.wv_model.corpus_count)
+
+
     def wv(self, words):
         '''
         词转向量
@@ -323,6 +392,8 @@ class MyWord2Vev2(object):
 
 
 if __name__ == '__main__':
+    # week3
+    '''
     wv_config_fpath = './config/wv_config.json'     # 配置文件地址
     wv_type = 'fasttext'                            # 词向量类型
     # 生成对象
@@ -336,3 +407,32 @@ if __name__ == '__main__':
     # 构建embedding_matrix并保存
     word2vec2_obj.get_embedding_matrix(vocab_fpath='./data/vocab/vocab.txt',
                                        save_fpath='./data/processed_data/vocabidx_vec_matrix.txt')
+    '''
+
+    # week4
+    wv_config_fpath = './config/wv_config.json'     # 配置文件地址
+    wv_type = 'fasttext'                            # 词向量类型
+    # 生成对象
+    word2vec2_obj = MyWord2Vev2(wv_config_fpath, wv_type)
+    # 加载原先生成的模型（不含start等词）
+    model_path = './model/word2vec/word2vec/word2vec.model'
+    word2vec2_obj.load_model(model_path)
+    # 添加start等特殊字符，重新训练词向量模型
+    old_vocab_fpath = './data/vocab/vocab.txt'
+    ori_train_fpath = './data/processed_data/train_seg_data.csv'
+    ori_test_fpath = './data/processed_data/test_seg_data.csv'
+    pad_trainX_fpath = './data/processed_data/trainX_pad.csv'
+    pad_trainY_fpath = './data/processed_data/trainY_pad.csv'
+    pad_testX_fpath = './data/processed_data/testX_pad.csv'
+    word2vec2_obj.expand_vocab(vocab_fpath=old_vocab_fpath, 
+                                ori_train_fpath=ori_train_fpath, 
+                                ori_test_fpath=ori_test_fpath, 
+                                pad_trainX_fpath=pad_trainX_fpath, 
+                                pad_trainY_fpath=pad_trainY_fpath, 
+                                pad_testX_fpath=pad_testX_fpath)
+    # 保存词向量模型
+    new_model_path = './model/word2vec/word2vec/word2vec_pad.model'
+    word2vec2_obj.save_model(model_path)
+    # 构建embedding_matrix并保存
+    word2vec2_obj.get_embedding_matrix(vocab_fpath='./data/vocab/vocab_pad.txt',
+                                       save_fpath='./data/processed_data/vocabidx_vec_matrix_pad.txt') 

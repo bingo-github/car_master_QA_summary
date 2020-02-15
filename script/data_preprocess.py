@@ -14,6 +14,11 @@ import jieba
 from tqdm import tqdm
 from multiprocessing import cpu_count, Pool
 
+START_TOKEN = '<start>'
+UNK_TOKEN = '<unkonw>'
+END_TOKEN = '<end>'
+PAD_TOKEN = '<pad>'
+
 
 class DataPreprocess(object):
     def __init__(self, ori_data_fpath_list):
@@ -232,6 +237,32 @@ class DataPreprocess(object):
         merged_df = pd.concat([train_df[['merged']], test_df[['merged']]], axis=0)
         merged_df.to_csv(wv_train_data_fpath, index=None, header=False)
         return merged_df
+
+
+    def pad_sentence(self, sentence, max_len, vocab):
+        '''
+        pad句子
+        :param sentence: str  分隔符为空格符
+        :param max_len: int
+        :param vocab: list 此表
+        :return: str pad之后的新句子
+        '''
+        words = sentence.strip().split(' ')
+        words = words[:max_len]
+        new_words = [word if word in vocab else UNK_TOKEN for word in words]
+        new_words = [START_TOKEN]+new_words+[END_TOKEN]
+        new_words = new_words+[PAD_TOKEN]*(max_len+2-len(new_words))
+        return ' '.join(new_words)
+
+
+    def get_max_len(self, data_df):
+        '''
+        从dataframe数据中获取每句话设置的最大长度
+        :param data_df:  DataFrame
+        :return: int max_len
+        '''
+        max_len_series = data.apply(lambda x: x.count(' ')+1)
+        return int(np.mean(max_len_series)+2*np.std(max_len_series))
 
 
 if __name__ == "__main__":
