@@ -411,7 +411,7 @@ if __name__ == '__main__':
 
     # week4
     wv_config_fpath = './config/wv_config.json'     # 配置文件地址
-    wv_type = 'fasttext'                            # 词向量类型
+    wv_type = 'word2vec'                            # 词向量类型
     # 生成对象
     word2vec2_obj = MyWord2Vev2(wv_config_fpath, wv_type)
     # 加载原先生成的模型（不含start等词）
